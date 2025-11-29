@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#F5F5F5"
+    android:padding="12dp">
+
+    <!-- Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingBottom="8dp">
+        
+        <TextView
+            android:id="@+id/widget_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Quick Book"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#1976D2"
+            android:gravity="start|center_vertical" />
+        
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@android:drawable/ic_menu_myplaces"
+            android:tint="#1976D2"
+            android:contentDescription="Ticket icon" />
+    </LinearLayout>
+
+    <!-- Divider -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#E0E0E0"
+        android:layout_marginBottom="8dp" />
+
+    <!-- Favorites List -->
+    <ListView
+        android:id="@+id/favorites_list"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:divider="@android:color/transparent"
+        android:dividerHeight="6dp"
+        android:paddingTop="4dp" />
+
+    <!-- Empty View -->
+    <TextView
+        android:id="@+id/empty_view"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="No favorites yet\nAdd tickets to favorites to quick book"
+        android:textSize="14sp"
+        android:textColor="#9E9E9E"
+        android:gravity="center"
+        android:padding="16dp"
+        android:visibility="gone" />
+
+</LinearLayout>
+
