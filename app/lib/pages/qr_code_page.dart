@@ -158,7 +158,7 @@ class _QRCodePageState extends State<QRCodePage> {
                                     key: ValueKey(
                                       'dropdown_${selectedBookingInList?.id ?? 'null'}',
                                     ),
-                                    value: selectedBookingInList,
+                                    initialValue: selectedBookingInList,
                                     items: bookingsWithQR.map((booking) {
                                       return DropdownMenuItem<Booking>(
                                         value: booking,

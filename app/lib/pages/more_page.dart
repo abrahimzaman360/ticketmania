@@ -1,124 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:app/l10n/app_localizations.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../main.dart';
 import '../services/ble_service.dart';
 import 'profile_page.dart';
 import 'language_page.dart';
+import 'notification_settings_page.dart';
+import 'permissions_page.dart';
 
 class MorePage extends StatelessWidget {
   const MorePage({super.key});
-
-  Future<void> _deleteAccount(BuildContext context) async {
-    // Show confirmation dialog
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.deleteAccount),
-        content: Text(
-          'Are you sure you want to delete your account? This action cannot be undone and will permanently delete all your data including bookings, wallet, and transactions.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(AppLocalizations.of(context)!.cancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.red,
-            ),
-            child: Text(AppLocalizations.of(context)!.deleteAccount),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true || !context.mounted) return;
-
-    // Show loading dialog
-    if (context.mounted) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
-    }
-
-    try {
-      final userId = supabase.auth.currentUser?.id;
-      if (userId == null) {
-        throw Exception('User not authenticated');
-      }
-
-      // Delete user data from database tables
-      // RLS policies now allow users to delete their own data
-      
-      // Get wallet first to delete transactions
-      final walletResponse = await supabase
-          .from('wallets')
-          .select('id')
-          .eq('user_id', userId)
-          .maybeSingle();
-      
-      if (walletResponse != null) {
-        // Delete wallet transactions
-        await supabase
-            .from('wallet_transactions')
-            .delete()
-            .eq('wallet_id', walletResponse['id']);
-        
-        // Delete wallet
-        await supabase
-            .from('wallets')
-            .delete()
-            .eq('user_id', userId);
-      }
-      
-      // Delete bookings (cascade will handle validation_logs)
-      await supabase
-          .from('bookings')
-          .delete()
-          .eq('user_id', userId);
-      
-      // Delete payments
-      await supabase
-          .from('payments')
-          .delete()
-          .eq('user_id', userId);
-      
-      // Delete profile
-      await supabase
-          .from('profiles')
-          .delete()
-          .eq('id', userId);
-
-      // Sign out (this will remove the auth session)
-      await supabase.auth.signOut();
-
-      if (context.mounted) {
-        Navigator.of(context).pop(); // Close loading dialog
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(AppLocalizations.of(context)!.accountDeletedSuccessfully),
-            backgroundColor: Theme.of(context).colorScheme.primary,
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        Navigator.of(context).pop(); // Close loading dialog
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${AppLocalizations.of(context)!.failedToDeleteAccount}: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
 
   Future<void> _signOut(BuildContext context) async {
     final confirm = await showDialog<bool>(
@@ -150,51 +42,69 @@ class MorePage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // User Info Card
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+      body: FutureBuilder<Map<String, dynamic>>(
+        future: _loadUserProfile(),
+        builder: (context, snapshot) {
+          final profile = snapshot.data ?? {};
+          final userName = profile['full_name'] as String? ?? 
+                          user?.email?.split('@').first ?? 'User';
+
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              // User Info Card
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      CircleAvatar(
-                        radius: 30,
-                        backgroundColor: Theme.of(context).colorScheme.primary,
-                        child: Text(
-                          user?.email?.substring(0, 1).toUpperCase() ?? 'U',
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              user?.email ?? 'User',
-                              style: Theme.of(context).textTheme.titleMedium,
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 30,
+                            backgroundColor: Theme.of(context).colorScheme.primary,
+                            child: Text(
+                              userName.isNotEmpty
+                                  ? userName[0].toUpperCase()
+                                  : user?.email?.substring(0, 1).toUpperCase() ?? 'U',
+                              style: const TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  userName,
+                                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  user?.email ?? 'User',
+                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                ],
+                ),
               ),
-            ),
-          ),
           const SizedBox(height: 16),
 
-          // Settings Section
+              // Settings Section
           Text(
             'Settings',
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
@@ -208,79 +118,88 @@ class MorePage extends StatelessWidget {
               children: [
                 Consumer<BLEService>(
                   builder: (context, bleService, _) {
+                    // Use cached value for immediate UI update, load async for first time
+                    final isEnabled = bleService.autoValidationEnabled;
                     return ListTile(
                       leading: Icon(
-                        bleService.isAdvertising
+                        isEnabled
                             ? Icons.bluetooth_connected
                             : Icons.bluetooth_disabled,
-                        color: bleService.isAdvertising 
+                        color: isEnabled 
                             ? Theme.of(context).colorScheme.primary 
                             : Colors.grey,
                       ),
                       title: Text(AppLocalizations.of(context)!.autoValidationBLE),
                       subtitle: Text(
-                        bleService.isAdvertising
+                        isEnabled
                             ? AppLocalizations.of(context)!.activeTicketsAutoValidate
                             : AppLocalizations.of(context)!.inactiveEnableAutoValidate,
                       ),
                       trailing: Switch(
-                        value: bleService.isAdvertising,
-                        onChanged: (value) async {
-                          if (value) {
-                            // Show loading indicator
-                            if (context.mounted) {
-                              showDialog(
-                                context: context,
-                                barrierDismissible: false,
-                                builder: (context) => const Center(
-                                  child: CircularProgressIndicator(),
-                                ),
-                              );
-                            }
-                            
-                            final initialized = await bleService.initialize();
-                            
-                            if (context.mounted) {
-                              Navigator.of(context).pop(); // Close loading dialog
-                            }
-                            
-                            if (initialized) {
-                              await bleService.startAdvertising();
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(AppLocalizations.of(context)!.bleAutoValidationEnabled),
-                                    backgroundColor: Theme.of(context).colorScheme.primary,
-                                  ),
-                                );
-                              }
-                            } else {
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      AppLocalizations.of(context)!.pleaseEnableBluetooth,
+                        value: isEnabled,
+                            onChanged: (value) async {
+                              if (value) {
+                                // Save preference first
+                                await bleService.setAutoValidationEnabled(true);
+                                
+                                // Show loading indicator
+                                if (context.mounted) {
+                                  showDialog(
+                                    context: context,
+                                    barrierDismissible: false,
+                                    builder: (context) => const Center(
+                                      child: CircularProgressIndicator(),
                                     ),
-                                    backgroundColor: Colors.orange,
-                                    duration: const Duration(seconds: 5),
-                                  ),
-                                );
+                                  );
+                                }
+                                
+                                final initialized = await bleService.initialize();
+                                
+                                if (context.mounted) {
+                                  Navigator.of(context).pop(); // Close loading dialog
+                                }
+                                
+                                if (initialized) {
+                                  await bleService.startAdvertising();
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(AppLocalizations.of(context)!.bleAutoValidationEnabled),
+                                        backgroundColor: Theme.of(context).colorScheme.primary,
+                                      ),
+                                    );
+                                  }
+                                } else {
+                                  // If initialization failed, revert preference
+                                  await bleService.setAutoValidationEnabled(false);
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          AppLocalizations.of(context)!.pleaseEnableBluetooth,
+                                        ),
+                                        backgroundColor: Colors.orange,
+                                        duration: const Duration(seconds: 5),
+                                      ),
+                                    );
+                                  }
+                                }
+                              } else {
+                                // Save preference and stop advertising
+                                await bleService.setAutoValidationEnabled(false);
+                                await bleService.stopAdvertising();
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(AppLocalizations.of(context)!.bleAutoValidationDisabled),
+                                      backgroundColor: Colors.grey,
+                                    ),
+                                  );
+                                }
                               }
-                            }
-                          } else {
-                            await bleService.stopAdvertising();
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(AppLocalizations.of(context)!.bleAutoValidationDisabled),
-                                  backgroundColor: Colors.grey,
-                                ),
-                              );
-                            }
-                          }
-                        },
-                      ),
-                    );
+                            },
+                          ),
+                        );
                   },
                 ),
                 const Divider(height: 1),
@@ -303,8 +222,11 @@ class MorePage extends StatelessWidget {
                   title: Text(AppLocalizations.of(context)!.notifications),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Notifications settings coming soon')),
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const NotificationSettingsPage(),
+                      ),
                     );
                   },
                 ),
@@ -318,6 +240,20 @@ class MorePage extends StatelessWidget {
                       context,
                       MaterialPageRoute(
                         builder: (context) => const LanguagePage(),
+                      ),
+                    );
+                  },
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.security),
+                  title: const Text('Permissions'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const PermissionsPage(),
                       ),
                     );
                   },
@@ -350,7 +286,42 @@ class MorePage extends StatelessWidget {
                       applicationVersion: '1.0.0',
                       applicationIcon: const Icon(Icons.confirmation_number, size: 48),
                       children: [
-                        Text('EU Public Transport Ticket Booking Service'),
+                        const Text('EU Public Transport Ticket Booking Service'),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Solo Software Engineered by Ibrahim Zaman',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            TextButton.icon(
+                              onPressed: () async {
+                                final url = Uri.parse(
+                                  'https://github.com/abrahimzaman360',
+                                );
+                                if (await canLaunchUrl(url)) {
+                                  await launchUrl(url, mode: LaunchMode.externalApplication);
+                                }
+                              },
+                              icon: const Icon(Icons.code),
+                              label: const Text('GitHub'),
+                            ),
+                            TextButton.icon(
+                              onPressed: () async {
+                                final url = Uri.parse(
+                                  'https://linkedin.com/in/abrahimzaman360',
+                                );
+                                if (await canLaunchUrl(url)) {
+                                  await launchUrl(url, mode: LaunchMode.externalApplication);
+                                }
+                              },
+                              icon: const Icon(Icons.business),
+                              label: const Text('LinkedIn'),
+                            ),
+                          ],
+                        ),
                       ],
                     );
                   },
@@ -382,7 +353,7 @@ class MorePage extends StatelessWidget {
           ),
           const SizedBox(height: 16),
 
-          // Account Actions
+              // Account Actions
           Text(
             'Account',
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
@@ -399,21 +370,32 @@ class MorePage extends StatelessWidget {
                   title: Text(AppLocalizations.of(context)!.signOut),
                   onTap: () => _signOut(context),
                 ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.delete_forever, color: Colors.red),
-                  title: Text(
-                    AppLocalizations.of(context)!.deleteAccount,
-                    style: const TextStyle(color: Colors.red),
-                  ),
-                  onTap: () => _deleteAccount(context),
-                ),
               ],
             ),
-          ),
-        ],
+              ),
+            ],
+          );
+        },
       ),
     );
+  }
+
+  Future<Map<String, dynamic>> _loadUserProfile() async {
+    try {
+      final user = supabase.auth.currentUser;
+      if (user == null) return {};
+
+      final response = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', user.id)
+          .maybeSingle();
+
+      return response ?? {};
+    } catch (e) {
+      debugPrint('Error loading user profile: $e');
+      return {};
+    }
   }
 }
 

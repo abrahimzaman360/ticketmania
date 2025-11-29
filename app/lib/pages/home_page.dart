@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:app/l10n/app_localizations.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import '../models/booking.dart';
 import '../services/booking_service.dart';
 import '../services/wallet_service.dart';
@@ -10,7 +11,6 @@ import 'booking_page.dart';
 import 'map_page.dart';
 import 'all_tickets_page.dart';
 import 'ticket_details_page.dart';
-import 'qr_code_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -69,22 +69,35 @@ class _HomePageContentState extends State<HomePageContent> {
           _totalActiveTickets = bookings.length;
           _isLoading = false;
         });
-        
-        // Update BLE service with new active tickets
-        try {
-          final bleService = Provider.of<BLEService>(context, listen: false);
-          bleService.updateActiveTickets();
-        } catch (e) {
-          // BLE service might not be initialized yet
-        }
+
+        // Update BLE service with new active tickets - do this asynchronously to avoid blocking
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            try {
+              final bleService = Provider.of<BLEService>(
+                context,
+                listen: false,
+              );
+              bleService.updateActiveTickets().catchError((e) {
+                debugPrint('Error updating BLE service: $e');
+              });
+            } catch (e) {
+              debugPrint('Error accessing BLE service: $e');
+            }
+          }
+        });
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
         final localizations = AppLocalizations.of(context);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('${localizations?.errorLoadingData ?? 'Error loading data'}: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${localizations?.errorLoadingData ?? 'Error loading data'}: $e',
+            ),
+          ),
+        );
       }
     }
   }
@@ -93,7 +106,7 @@ class _HomePageContentState extends State<HomePageContent> {
   Widget build(BuildContext context) {
     // Cache localizations to avoid repeated lookups
     final localizations = AppLocalizations.of(context);
-    
+
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
@@ -231,7 +244,8 @@ class _HomePageContentState extends State<HomePageContent> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    localizations?.bookFirstTicket ?? 'Book your first ticket to get started',
+                    localizations?.bookFirstTicket ??
+                        'Book your first ticket to get started',
                     style: Theme.of(
                       context,
                     ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
@@ -253,19 +267,13 @@ class _HomePageContentState extends State<HomePageContent> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => TicketDetailsPage(booking: booking),
+                          builder: (context) =>
+                              TicketDetailsPage(booking: booking),
                         ),
                       );
                     },
                     onQRTap: booking.qrCode != null
-                        ? () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => QRCodePage(initialBooking: booking),
-                              ),
-                            );
-                          }
+                        ? () => _showQRCodePopup(context, booking)
                         : null,
                   ),
                 ),
@@ -284,12 +292,128 @@ class _HomePageContentState extends State<HomePageContent> {
                   ).then((_) => _loadData());
                 },
                 icon: const Icon(Icons.arrow_forward),
-                label: Text('${localizations?.viewMore ?? 'View More'} (${_activeBookings.length - 5} more)'),
+                label: Text(
+                  '${localizations?.viewMore ?? 'View More'} (${_activeBookings.length - 5} more)',
+                ),
               ),
             ),
           ),
       ],
     );
+  }
+
+  void _showQRCodePopup(BuildContext context, Booking booking) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(20),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(24),
+          ),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'QR Code',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(context).pop(),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              // QR Code
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: QrImageView(
+                  data: booking.qrCode!,
+                  version: QrVersions.auto,
+                  size: 250.0,
+                  backgroundColor: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 20),
+              // Ticket Info
+              Text(
+                booking.ticketTypeName ?? 'Ticket',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              if (booking.validUntil != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Valid until: ${_formatDateTime(booking.validUntil!)}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+              const SizedBox(height: 24),
+              // Instructions
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.primaryContainer.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      size: 20,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Show this QR code to the validator when boarding',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onPrimaryContainer,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatDateTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = dateTime.difference(now);
+
+    if (difference.inDays > 0) {
+      return '${difference.inDays}d ${difference.inHours % 24}h';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h ${difference.inMinutes % 60}m';
+    } else {
+      return '${difference.inMinutes}m';
+    }
   }
 }
 
@@ -346,4 +470,3 @@ class _OverviewItem extends StatelessWidget {
     );
   }
 }
-

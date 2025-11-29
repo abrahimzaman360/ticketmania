@@ -10,6 +10,7 @@ import 'services/wallet_service.dart';
 import 'services/widget_service.dart';
 import 'services/ble_service.dart';
 import 'services/locale_service.dart';
+import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,6 +22,15 @@ void main() async {
   // Initialize widget service
   final widgetService = WidgetService();
   await widgetService.initialize();
+
+  // Initialize notification service (non-blocking, handles errors internally)
+  try {
+    final notificationService = NotificationService();
+    await notificationService.initialize();
+  } catch (e) {
+    debugPrint('Failed to initialize notification service: $e');
+    // Continue app startup even if notifications fail
+  }
 
   runApp(const TicketMania());
 }
@@ -87,9 +97,16 @@ class _TicketManiaState extends State<TicketMania> {
 
   void _initializeBLEService(BuildContext context) {
     final bleService = Provider.of<BLEService>(context, listen: false);
-    bleService.initialize().then((initialized) {
+    bleService.initialize().then((initialized) async {
       if (initialized) {
-        bleService.startAdvertising();
+        // Only start advertising if auto-validation is enabled in preferences
+        final isAutoValidationEnabled = await bleService
+            .isAutoValidationEnabled();
+        if (isAutoValidationEnabled) {
+          bleService.startAdvertising();
+        } else {
+          debugPrint('Auto-validation is disabled, skipping BLE advertising');
+        }
       }
     });
   }

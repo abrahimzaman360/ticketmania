@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import '../services/booking_service.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/booking.dart';
 
 /// Custom Service UUID for Ticket Mania BLE service
@@ -25,10 +26,61 @@ class BLEService extends ChangeNotifier {
   bool _isNativeAdvertising = false;
   Timer? _advertisingTimer;
   List<String> _activeTicketIds = [];
+  bool? _autoValidationEnabled; // Cached preference, null means not loaded yet
+  static const String _autoValidationKey = 'ble_auto_validation_enabled';
+
+  /// Load auto-validation preference from SharedPreferences
+  Future<bool> _loadAutoValidationPreference() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      // Default to true (enabled) if not set
+      return prefs.getBool(_autoValidationKey) ?? true;
+    } catch (e) {
+      debugPrint('Error loading auto-validation preference: $e');
+      // Default to true if error
+      return true;
+    }
+  }
+
+  /// Save auto-validation preference to SharedPreferences
+  Future<void> _saveAutoValidationPreference(bool enabled) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_autoValidationKey, enabled);
+      _autoValidationEnabled = enabled;
+      debugPrint('Saved auto-validation preference: $enabled');
+    } catch (e) {
+      debugPrint('Error saving auto-validation preference: $e');
+    }
+  }
+
+  /// Get whether auto-validation is enabled (from preferences)
+  /// Returns cached value if available, otherwise loads from preferences
+  Future<bool> isAutoValidationEnabled() async {
+    if (_autoValidationEnabled == null) {
+      _autoValidationEnabled = await _loadAutoValidationPreference();
+    }
+    return _autoValidationEnabled ?? true;
+  }
+
+  /// Get whether auto-validation is enabled (synchronous, uses cached value)
+  /// Returns true if not yet loaded (default)
+  bool get autoValidationEnabled {
+    return _autoValidationEnabled ?? true;
+  }
+
+  /// Set auto-validation preference
+  Future<void> setAutoValidationEnabled(bool enabled) async {
+    await _saveAutoValidationPreference(enabled);
+    notifyListeners();
+  }
 
   /// Initialize BLE service and request permissions
   Future<bool> initialize() async {
     try {
+      // Load auto-validation preference
+      _autoValidationEnabled = await _loadAutoValidationPreference();
+      
       // Check and request Bluetooth permissions
       final bluetoothScanStatus = await Permission.bluetoothScan.request();
       final bluetoothAdvertiseStatus = await Permission.bluetoothAdvertise.request();
@@ -72,6 +124,13 @@ class BLEService extends ChangeNotifier {
   /// Uses highly optimized native code for battery efficiency
   Future<void> startAdvertising() async {
     if (_isAdvertising) return;
+    
+    // Check if auto-validation is enabled
+    final isEnabled = await isAutoValidationEnabled();
+    if (!isEnabled) {
+      debugPrint('Auto-validation is disabled, not starting BLE advertising');
+      return;
+    }
 
     try {
       // Get active tickets
@@ -126,8 +185,14 @@ class BLEService extends ChangeNotifier {
   }
 
   /// Stop advertising
-  Future<void> stopAdvertising() async {
+  /// If savePreference is true, also saves the preference to disable auto-validation
+  Future<void> stopAdvertising({bool savePreference = false}) async {
     if (!_isAdvertising) return;
+    
+    // Save preference if requested
+    if (savePreference) {
+      await _saveAutoValidationPreference(false);
+    }
 
     // Stop native advertising if active
     if (_isNativeAdvertising) {

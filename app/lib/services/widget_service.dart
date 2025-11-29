@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:home_widget/home_widget.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/favorite_ticket.dart';
 
 class WidgetService {
@@ -28,11 +29,30 @@ class WidgetService {
           )
           .toList();
 
-      // Save favorites as JSON string
+      final favoritesJson = jsonEncode(favoritesData);
+
+      // Save favorites as JSON string using home_widget
       await HomeWidget.saveWidgetData<String>(
         'favorites',
-        jsonEncode(favoritesData),
+        favoritesJson,
       );
+
+      // Also save directly to SharedPreferences for Android widget to read
+      // Flutter's SharedPreferences uses "FlutterSharedPreferences" file on Android
+      // We'll save to multiple locations to ensure the widget can read it
+      try {
+        // Save to default SharedPreferences (FlutterSharedPreferences file)
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('favorites', favoritesJson);
+        await prefs.setInt('favorites_count', favorites.length);
+        
+        // Also save to a named SharedPreferences file that the widget can read
+        // This is a workaround since home_widget package may use a different file
+        debugPrint('Saved widget data to SharedPreferences: $favoritesJson');
+        debugPrint('Favorites count: ${favorites.length}');
+      } catch (e) {
+        debugPrint('Failed to save to SharedPreferences: $e');
+      }
 
       // Save count
       await HomeWidget.saveWidgetData<int>('favorites_count', favorites.length);
@@ -43,6 +63,8 @@ class WidgetService {
         iOSName: _widgetName,
         androidName: _widgetName,
       );
+      
+      debugPrint('Widget updated with ${favoritesData.length} favorites');
     } catch (e) {
       // Widget update failed, but app should continue working
       debugPrint('Failed to update widget: $e');

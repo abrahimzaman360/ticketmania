@@ -1,20 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import '../models/booking.dart';
-import 'qr_code_page.dart';
 
 class TicketDetailsPage extends StatelessWidget {
   final Booking booking;
 
-  const TicketDetailsPage({
-    super.key,
-    required this.booking,
-  });
+  const TicketDetailsPage({super.key, required this.booking});
 
   @override
   Widget build(BuildContext context) {
     final isValid = booking.isValid;
-    final statusColor = isValid 
-        ? Theme.of(context).colorScheme.primary 
+    final statusColor = isValid
+        ? Theme.of(context).colorScheme.primary
         : Colors.orange;
 
     return Scaffold(
@@ -69,26 +66,25 @@ class TicketDetailsPage extends StatelessWidget {
                             children: [
                               Text(
                                 booking.ticketTypeName ?? 'Ticket',
-                                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
+                                style: Theme.of(context).textTheme.headlineSmall
+                                    ?.copyWith(fontWeight: FontWeight.bold),
                               ),
                               const SizedBox(height: 4),
                               Text(
                                 'Quantity: ${booking.quantity}',
-                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: Colors.grey[600],
-                                ),
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(color: Colors.grey[600]),
                               ),
                             ],
                           ),
                         ),
                         Text(
                           '€${booking.totalPrice.toStringAsFixed(2)}',
-                          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
+                          style: Theme.of(context).textTheme.headlineMedium
+                              ?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
                         ),
                       ],
                     ),
@@ -99,7 +95,8 @@ class TicketDetailsPage extends StatelessWidget {
             const SizedBox(height: 16),
 
             // Route Information
-            if (booking.fromStationName != null || booking.toStationName != null)
+            if (booking.fromStationName != null ||
+                booking.toStationName != null)
               Card(
                 elevation: 2,
                 child: Padding(
@@ -116,9 +113,8 @@ class TicketDetailsPage extends StatelessWidget {
                           const SizedBox(width: 8),
                           Text(
                             'Route',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.bold),
                           ),
                         ],
                       ),
@@ -131,24 +127,19 @@ class TicketDetailsPage extends StatelessWidget {
                               children: [
                                 Text(
                                   'From',
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: Colors.grey[600],
-                                  ),
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(color: Colors.grey[600]),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
                                   booking.fromStationName ?? 'Any Station',
-                                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                                  style: Theme.of(context).textTheme.bodyLarge
+                                      ?.copyWith(fontWeight: FontWeight.w500),
                                 ),
                               ],
                             ),
                           ),
-                          Icon(
-                            Icons.arrow_forward,
-                            color: Colors.grey[400],
-                          ),
+                          Icon(Icons.arrow_forward, color: Colors.grey[400]),
                           const SizedBox(width: 16),
                           Expanded(
                             child: Column(
@@ -156,16 +147,14 @@ class TicketDetailsPage extends StatelessWidget {
                               children: [
                                 Text(
                                   'To',
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: Colors.grey[600],
-                                  ),
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(color: Colors.grey[600]),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
                                   booking.toStationName ?? 'Any Station',
-                                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                                  style: Theme.of(context).textTheme.bodyLarge
+                                      ?.copyWith(fontWeight: FontWeight.w500),
                                 ),
                               ],
                             ),
@@ -176,7 +165,8 @@ class TicketDetailsPage extends StatelessWidget {
                   ),
                 ),
               ),
-            if (booking.fromStationName != null || booking.toStationName != null)
+            if (booking.fromStationName != null ||
+                booking.toStationName != null)
               const SizedBox(height: 16),
 
             // Validity Information
@@ -196,9 +186,8 @@ class TicketDetailsPage extends StatelessWidget {
                         const SizedBox(width: 8),
                         Text(
                           'Validity',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
@@ -253,23 +242,15 @@ class TicketDetailsPage extends StatelessWidget {
                           const SizedBox(width: 8),
                           Text(
                             'QR Code',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.bold),
                           ),
                         ],
                       ),
                       const SizedBox(height: 16),
                       Center(
                         child: ElevatedButton.icon(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const QRCodePage(),
-                              ),
-                            );
-                          },
+                          onPressed: () => _showQRCodePopup(context, booking),
                           icon: const Icon(Icons.qr_code_scanner),
                           label: const Text('View QR Code'),
                           style: ElevatedButton.styleFrom(
@@ -303,9 +284,8 @@ class TicketDetailsPage extends StatelessWidget {
                         const SizedBox(width: 8),
                         Text(
                           'Booking Information',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
@@ -358,16 +338,16 @@ class TicketDetailsPage extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Colors.grey[600],
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
               ),
               const SizedBox(height: 2),
               Text(
                 value,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  fontWeight: FontWeight.w500,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w500),
               ),
             ],
           ),
@@ -382,14 +362,16 @@ class TicketDetailsPage extends StatelessWidget {
 
     // Format as date and time
     final dateStr = '${dateTime.day}/${dateTime.month}/${dateTime.year}';
-    final timeStr = '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+    final timeStr =
+        '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
 
     // Add relative time if in the future
     String relativeStr = '';
     if (difference.inDays > 0) {
       relativeStr = ' (in ${difference.inDays}d ${difference.inHours % 24}h)';
     } else if (difference.inHours > 0) {
-      relativeStr = ' (in ${difference.inHours}h ${difference.inMinutes % 60}m)';
+      relativeStr =
+          ' (in ${difference.inHours}h ${difference.inMinutes % 60}m)';
     } else if (difference.inMinutes > 0) {
       relativeStr = ' (in ${difference.inMinutes}m)';
     } else if (difference.isNegative) {
@@ -405,5 +387,105 @@ class TicketDetailsPage extends StatelessWidget {
 
     return '$dateStr at $timeStr$relativeStr';
   }
-}
 
+  void _showQRCodePopup(BuildContext context, Booking booking) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(20),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(24),
+          ),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'QR Code',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(context).pop(),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              // QR Code
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: QrImageView(
+                  data: booking.qrCode!,
+                  version: QrVersions.auto,
+                  size: 250.0,
+                  backgroundColor: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 20),
+              // Ticket Info
+              Text(
+                booking.ticketTypeName ?? 'Ticket',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              if (booking.validUntil != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Valid until: ${_formatDateTime(booking.validUntil!)}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+              const SizedBox(height: 24),
+              // Instructions
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.primaryContainer.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      size: 20,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Show this QR code to the validator when boarding',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onPrimaryContainer,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

@@ -76,6 +76,12 @@ dependencies:
   # Shared preferences for storing settings
   shared_preferences: ^2.2.2
   
+  # Local notifications
+  flutter_local_notifications: ^17.2.3
+  
+  # URL launcher for opening links
+  url_launcher: ^6.3.1
+  
   # Splash screen
   flutter_native_splash: ^2.4.1
 

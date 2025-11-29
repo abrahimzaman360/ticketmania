@@ -262,40 +262,17 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Phone
+                    // Phone - Disabled
                     TextFormField(
                       controller: _phoneController,
+                      enabled: false,
                       decoration: const InputDecoration(
                         labelText: 'Phone Number',
-                        hintText: 'Enter your phone number',
+                        hintText: 'Phone number is disabled',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.phone),
                       ),
                       keyboardType: TextInputType.phone,
-                      validator: (value) {
-                        if (value != null && value.trim().isNotEmpty) {
-                          // Basic phone validation
-                          final phoneRegex = RegExp(r'^[+]?[(]?[0-9]{1,4}[)]?[-\s.]?[(]?[0-9]{1,4}[)]?[-\s.]?[0-9]{1,9}$');
-                          if (!phoneRegex.hasMatch(value.trim())) {
-                            return 'Please enter a valid phone number';
-                          }
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Address
-                    TextFormField(
-                      controller: _addressController,
-                      decoration: const InputDecoration(
-                        labelText: 'Address',
-                        hintText: 'Enter your address',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.home),
-                      ),
-                      maxLines: 3,
-                      textCapitalization: TextCapitalization.words,
                     ),
                     const SizedBox(height: 32),
 
@@ -341,11 +318,148 @@ class _ProfilePageState extends State<ProfilePage> {
                         ],
                       ),
                     ),
+                    const SizedBox(height: 32),
+
+                    // Delete Account Section
+                    Text(
+                      'Danger Zone',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.red,
+                          ),
+                    ),
+                    const SizedBox(height: 16),
+                    Card(
+                      color: Colors.red.shade50,
+                      child: ListTile(
+                        leading: const Icon(Icons.delete_forever, color: Colors.red),
+                        title: const Text(
+                          'Delete Account',
+                          style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: const Text(
+                          'Permanently delete your account and all data',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                        onTap: () => _deleteAccount(context),
+                      ),
+                    ),
                   ],
                 ),
               ),
             ),
     );
+  }
+
+  Future<void> _deleteAccount(BuildContext context) async {
+    // Show confirmation dialog
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Account'),
+        content: const Text(
+          'Are you sure you want to delete your account? This action cannot be undone and will permanently delete all your data including bookings, wallet, and transactions.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.red,
+            ),
+            child: const Text('Delete Account'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !context.mounted) return;
+
+    // Show loading dialog
+    if (context.mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    try {
+      final userId = supabase.auth.currentUser?.id;
+      if (userId == null) {
+        throw Exception('User not authenticated');
+      }
+
+      // Delete user data from database tables
+      // RLS policies now allow users to delete their own data
+      
+      // Get wallet first to delete transactions
+      final walletResponse = await supabase
+          .from('wallets')
+          .select('id')
+          .eq('user_id', userId)
+          .maybeSingle();
+      
+      if (walletResponse != null) {
+        // Delete wallet transactions
+        await supabase
+            .from('wallet_transactions')
+            .delete()
+            .eq('wallet_id', walletResponse['id']);
+        
+        // Delete wallet
+        await supabase
+            .from('wallets')
+            .delete()
+            .eq('user_id', userId);
+      }
+      
+      // Delete bookings (cascade will handle validation_logs)
+      await supabase
+          .from('bookings')
+          .delete()
+          .eq('user_id', userId);
+      
+      // Delete payments
+      await supabase
+          .from('payments')
+          .delete()
+          .eq('user_id', userId);
+      
+      // Delete profile
+      await supabase
+          .from('profiles')
+          .delete()
+          .eq('id', userId);
+
+      // Sign out (this will remove the auth session)
+      await supabase.auth.signOut();
+
+      if (context.mounted) {
+        Navigator.of(context).pop(); // Close loading dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Account deleted successfully'),
+            backgroundColor: Theme.of(context).colorScheme.primary,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.of(context).pop(); // Close loading dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete account: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }
 

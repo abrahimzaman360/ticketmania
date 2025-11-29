@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import '../models/booking.dart';
 import '../services/booking_service.dart';
 import '../widgets/booking_card.dart';
 import 'ticket_details_page.dart';
-import 'qr_code_page.dart';
 
 class AllTicketsPage extends StatefulWidget {
   const AllTicketsPage({super.key});
@@ -54,9 +54,9 @@ class _AllTicketsPageState extends State<AllTicketsPage> {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading tickets: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error loading tickets: $e')));
       }
     }
   }
@@ -81,9 +81,7 @@ class _AllTicketsPageState extends State<AllTicketsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        automaticallyImplyLeading: true,
-      ),
+      appBar: AppBar(automaticallyImplyLeading: true),
       body: Column(
         children: [
           // Filter Chips
@@ -114,8 +112,12 @@ class _AllTicketsPageState extends State<AllTicketsPage> {
                           _onFilterChanged(filter['value']!);
                         }
                       },
-                      selectedColor: Theme.of(context).colorScheme.primaryContainer,
-                      checkmarkColor: Theme.of(context).colorScheme.onPrimaryContainer,
+                      selectedColor: Theme.of(
+                        context,
+                      ).colorScheme.primaryContainer,
+                      checkmarkColor: Theme.of(
+                        context,
+                      ).colorScheme.onPrimaryContainer,
                     ),
                   );
                 }).toList(),
@@ -128,88 +130,198 @@ class _AllTicketsPageState extends State<AllTicketsPage> {
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _allBookings.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.confirmation_number_outlined,
-                              size: 64,
-                              color: Colors.grey[400],
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'No tickets found',
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Try selecting a different filter',
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: Colors.grey[600],
-                                  ),
-                            ),
-                          ],
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.confirmation_number_outlined,
+                          size: 64,
+                          color: Colors.grey[400],
                         ),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: _loadBookings,
-                        child: ListView.builder(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: _displayedBookings.length + (_allBookings.length > 5 ? 1 : 0),
-                          itemBuilder: (context, index) {
-                            if (index == _displayedBookings.length) {
-                              // Show "View More" or "Show Less" button
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 8),
-                                child: Center(
-                                  child: OutlinedButton.icon(
-                                    onPressed: _toggleShowAll,
-                                    icon: Icon(
-                                      _showAll ? Icons.expand_less : Icons.expand_more,
-                                    ),
-                                    label: Text(
-                                      _showAll
-                                          ? 'Show Less'
-                                          : 'View More (${_allBookings.length - 5} more)',
-                                    ),
-                                  ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No tickets found',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Try selecting a different filter',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                  )
+                : RefreshIndicator(
+                    onRefresh: _loadBookings,
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount:
+                          _displayedBookings.length +
+                          (_allBookings.length > 5 ? 1 : 0),
+                      itemBuilder: (context, index) {
+                        if (index == _displayedBookings.length) {
+                          // Show "View More" or "Show Less" button
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Center(
+                              child: OutlinedButton.icon(
+                                onPressed: _toggleShowAll,
+                                icon: Icon(
+                                  _showAll
+                                      ? Icons.expand_less
+                                      : Icons.expand_more,
+                                ),
+                                label: Text(
+                                  _showAll
+                                      ? 'Show Less'
+                                      : 'View More (${_allBookings.length - 5} more)',
+                                ),
+                              ),
+                            ),
+                          );
+                        }
+
+                        final booking = _displayedBookings[index];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: BookingCard(
+                            booking: booking,
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      TicketDetailsPage(booking: booking),
                                 ),
                               );
-                            }
-
-                            final booking = _displayedBookings[index];
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: BookingCard(
-                                booking: booking,
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => TicketDetailsPage(booking: booking),
-                                    ),
-                                  );
-                                },
-                                onQRTap: booking.qrCode != null
-                                    ? () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) => QRCodePage(initialBooking: booking),
-                                          ),
-                                        );
-                                      }
-                                    : null,
-                              ),
-                            );
-                          },
-                        ),
-                      ),
+                            },
+                            onQRTap: booking.qrCode != null
+                                ? () => _showQRCodePopup(context, booking)
+                                : null,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
           ),
         ],
       ),
     );
   }
-}
 
+  void _showQRCodePopup(BuildContext context, Booking booking) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(20),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(24),
+          ),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'QR Code',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(context).pop(),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              // QR Code
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: QrImageView(
+                  data: booking.qrCode!,
+                  version: QrVersions.auto,
+                  size: 250.0,
+                  backgroundColor: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 20),
+              // Ticket Info
+              Text(
+                booking.ticketTypeName ?? 'Ticket',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              if (booking.validUntil != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Valid until: ${_formatDateTime(booking.validUntil!)}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+              const SizedBox(height: 24),
+              // Instructions
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.primaryContainer.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      size: 20,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Show this QR code to the validator when boarding',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onPrimaryContainer,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatDateTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = dateTime.difference(now);
+
+    if (difference.inDays > 0) {
+      return '${difference.inDays}d ${difference.inHours % 24}h';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h ${difference.inMinutes % 60}m';
+    } else {
+      return '${difference.inMinutes}m';
+    }
+  }
+}

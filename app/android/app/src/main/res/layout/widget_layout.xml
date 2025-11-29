@@ -3,42 +3,60 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#F5F5F5"
-    android:padding="12dp">
+    android:background="@android:color/white"
+    android:padding="16dp">
 
-    <!-- Header -->
+    <!-- Header with gradient background effect -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:paddingBottom="8dp">
+        android:paddingBottom="12dp"
+        android:paddingTop="4dp">
         
-        <TextView
-            android:id="@+id/widget_title"
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Quick Book"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:textColor="#1976D2"
-            android:gravity="start|center_vertical" />
+            android:orientation="vertical">
+            
+            <TextView
+                android:id="@+id/widget_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Quick Book"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:textColor="#1A237E"
+                android:gravity="start|center_vertical" />
+            
+            <TextView
+                android:id="@+id/widget_subtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Tap to book your favorites"
+                android:textSize="12sp"
+                android:textColor="#757575"
+                android:layout_marginTop="2dp" />
+        </LinearLayout>
         
         <ImageView
-            android:layout_width="24dp"
-            android:layout_height="24dp"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
             android:src="@android:drawable/ic_menu_myplaces"
-            android:tint="#1976D2"
-            android:contentDescription="Ticket icon" />
+            android:tint="#1A237E"
+            android:contentDescription="Ticket icon"
+            android:background="@android:drawable/dialog_holo_light_frame"
+            android:padding="4dp" />
     </LinearLayout>
 
     <!-- Divider -->
     <View
         android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="#E0E0E0"
-        android:layout_marginBottom="8dp" />
+        android:layout_height="2dp"
+        android:background="#E3F2FD"
+        android:layout_marginBottom="12dp" />
 
     <!-- Favorites List -->
     <ListView
@@ -46,20 +64,47 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:divider="@android:color/transparent"
-        android:dividerHeight="6dp"
-        android:paddingTop="4dp" />
+        android:dividerHeight="8dp"
+        android:paddingTop="4dp"
+        android:clipToPadding="false" />
 
     <!-- Empty View -->
-    <TextView
+    <LinearLayout
         android:id="@+id/empty_view"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="No favorites yet\nAdd tickets to favorites to quick book"
-        android:textSize="14sp"
-        android:textColor="#9E9E9E"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
         android:gravity="center"
-        android:padding="16dp"
-        android:visibility="gone" />
+        android:padding="24dp"
+        android:visibility="gone">
+        
+        <ImageView
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:src="@android:drawable/ic_menu_myplaces"
+            android:tint="#BDBDBD"
+            android:contentDescription="Empty state"
+            android:layout_marginBottom="16dp" />
+        
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="No favorites yet"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:textColor="#757575"
+            android:gravity="center"
+            android:layout_marginBottom="8dp" />
+        
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Add tickets to favorites\nto quick book from here"
+            android:textSize="13sp"
+            android:textColor="#9E9E9E"
+            android:gravity="center"
+            android:lineSpacingExtra="4dp" />
+    </LinearLayout>
 
 </LinearLayout>
 
