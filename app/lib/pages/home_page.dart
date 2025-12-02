@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:app/l10n/app_localizations.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import '../models/booking.dart';
-import '../services/booking_service.dart';
-import '../services/wallet_service.dart';
-import '../services/ble_service.dart';
+import '../models/booking.dart' as models;
 import '../widgets/booking_card.dart';
-import 'booking_page.dart';
+import '../widgets/offline_indicator.dart';
+import '../providers/booking_providers.dart';
+import '../providers/ble_provider.dart';
+import '../providers/navigation_provider.dart';
+import '../providers/service_providers.dart';
 import 'map_page.dart';
 import 'all_tickets_page.dart';
 import 'ticket_details_page.dart';
@@ -29,77 +30,34 @@ class _HomePageState extends State<HomePage> {
 }
 
 // Content-only version for bottom navigation
-class HomePageContent extends StatefulWidget {
+class HomePageContent extends ConsumerStatefulWidget {
   const HomePageContent({super.key});
 
   @override
-  State<HomePageContent> createState() => _HomePageContentState();
+  ConsumerState<HomePageContent> createState() => _HomePageContentState();
 }
 
-class _HomePageContentState extends State<HomePageContent> {
-  final BookingService _bookingService = BookingService();
-  final WalletService _walletService = WalletService();
-  List<Booking> _activeBookings = [];
-  double _walletBalance = 0.0;
-  int _totalActiveTickets = 0;
-  bool _isLoading = true;
-
+class _HomePageContentState extends ConsumerState<HomePageContent> {
   @override
-  void initState() {
-    super.initState();
-    _loadData();
-  }
+  void didChangeDependencies() {
+    super.didChangeDependencies();
 
-  Future<void> _loadData() async {
-    setState(() => _isLoading = true);
-    try {
-      final bookings = await _bookingService.getActiveBookings();
-      double balance = 0.0;
-      try {
-        final wallet = await _walletService.getWallet();
-        balance = wallet.balance;
-      } catch (e) {
-        // Wallet might not exist yet
-      }
-
-      if (mounted) {
-        setState(() {
-          _activeBookings = bookings;
-          _walletBalance = balance;
-          _totalActiveTickets = bookings.length;
-          _isLoading = false;
-        });
-
-        // Update BLE service with new active tickets - do this asynchronously to avoid blocking
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            try {
-              final bleService = Provider.of<BLEService>(
-                context,
-                listen: false,
-              );
-              bleService.updateActiveTickets().catchError((e) {
-                debugPrint('Error updating BLE service: $e');
-              });
-            } catch (e) {
-              debugPrint('Error accessing BLE service: $e');
-            }
+    // Update BLE service when bookings change
+    final bookingsAsync = ref.watch(activeBookingsProvider);
+    bookingsAsync.whenData((bookings) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          try {
+            final bleService = ref.read(bleServiceProvider);
+            bleService.updateActiveTickets().catchError((e) {
+              debugPrint('Error updating BLE service: $e');
+            });
+          } catch (e) {
+            debugPrint('Error accessing BLE service: $e');
           }
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        final localizations = AppLocalizations.of(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '${localizations?.errorLoadingData ?? 'Error loading data'}: $e',
-            ),
-          ),
-        );
-      }
-    }
+        }
+      });
+    });
   }
 
   @override
@@ -109,6 +67,7 @@ class _HomePageContentState extends State<HomePageContent> {
 
     return Scaffold(
       appBar: AppBar(
+        title: Text(localizations?.appTitle ?? 'Ticket Mania'),
         automaticallyImplyLeading: false,
         actions: [
           IconButton(
@@ -123,31 +82,190 @@ class _HomePageContentState extends State<HomePageContent> {
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _loadData,
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Overview Section
-                    _buildOverviewSection(localizations),
-                    const SizedBox(height: 24),
-                    // Active Tickets Section
-                    _buildActiveTicketsSection(localizations),
-                  ],
-                ),
-              ),
+      body: Column(
+        children: [
+          const OfflineBanner(),
+          Expanded(
+            child: RefreshIndicator(
+        onRefresh: () async {
+          ref.invalidate(activeBookingsProvider);
+          ref.invalidate(walletBalanceProvider);
+          // Wait for providers to refresh
+          await Future.delayed(const Duration(milliseconds: 100));
+        },
+        child: ref
+            .watch(activeBookingsProvider)
+            .when(
+              data: (bookings) {
+                // Watch wallet balance provider separately
+                final walletBalanceAsync = ref.watch(walletBalanceProvider);
+
+                return walletBalanceAsync.when(
+                  data: (walletBalance) {
+                    // Both providers have data - show full content
+                    return SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Overview Section
+                          _buildOverviewSection(
+                            localizations,
+                            bookings.length,
+                            walletBalance,
+                          ),
+                          const SizedBox(height: 24),
+                          // Active Tickets Section
+                          _buildActiveTicketsSection(localizations, bookings),
+                        ],
+                      ),
+                    );
+                  },
+                  loading: () {
+                    // Bookings loaded but wallet still loading - show bookings with loading wallet
+                    return SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Overview Section with loading wallet
+                          _buildOverviewSection(
+                            localizations,
+                            bookings.length,
+                            0.0,
+                          ),
+                          const SizedBox(height: 24),
+                          // Active Tickets Section
+                          _buildActiveTicketsSection(localizations, bookings),
+                        ],
+                      ),
+                    );
+                  },
+                  error: (error, stack) {
+                    // Bookings loaded but wallet error - show bookings with 0 balance
+                    debugPrint('Error loading wallet balance: $error');
+                    return SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Overview Section with 0 balance
+                          _buildOverviewSection(
+                            localizations,
+                            bookings.length,
+                            0.0,
+                          ),
+                          const SizedBox(height: 24),
+                          // Active Tickets Section
+                          _buildActiveTicketsSection(localizations, bookings),
+                        ],
+                      ),
+                    );
+                  },
+                );
+              },
+              loading: () {
+                // Bookings still loading - show loading state
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.primaryContainer.withValues(alpha: 0.3),
+                          shape: BoxShape.circle,
+                        ),
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Text(
+                        'Loading your tickets...',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(color: Colors.grey[600]),
+                      ),
+                    ],
+                  ),
+                );
+              },
+              error: (error, stack) {
+                // Bookings error - show error with retry
+                debugPrint('Error loading bookings: $error');
+                debugPrint('Stack trace: $stack');
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.error_outline_rounded,
+                            size: 48,
+                            color: Colors.red.shade400,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        Text(
+                          localizations?.errorLoadingData ??
+                              'Error loading data',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Failed to load data',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: Colors.grey[600]),
+                        ),
+                        const SizedBox(height: 32),
+                        FilledButton.icon(
+                          onPressed: () {
+                            ref.invalidate(activeBookingsProvider);
+                            ref.invalidate(walletBalanceProvider);
+                          },
+                          icon: const Icon(Icons.refresh_rounded),
+                          label: const Text('Retry'),
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+            ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const BookingPage()),
-          ).then((_) => _loadData());
+          // Switch to Book tab (index 1) instead of navigating to a new page
+          ref.read(navigationIndexProvider.notifier).state = 1;
+          // Refresh data when switching to booking page
+          ref.invalidate(activeBookingsProvider);
+          ref.invalidate(walletBalanceProvider);
         },
         icon: const Icon(Icons.add),
         label: Text(localizations?.bookTicket ?? 'Book Ticket'),
@@ -155,38 +273,80 @@ class _HomePageContentState extends State<HomePageContent> {
     );
   }
 
-  Widget _buildOverviewSection(AppLocalizations? localizations) {
-    return Card(
-      elevation: 2,
+  Widget _buildOverviewSection(
+    AppLocalizations? localizations,
+    int ticketCount,
+    double walletBalance,
+  ) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Theme.of(context).colorScheme.primary,
+            Theme.of(context).colorScheme.primary.withValues(alpha: 0.8),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              localizations?.overview ?? 'Overview',
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.dashboard_outlined,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  localizations?.overview ?? 'Overview',
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             Row(
               children: [
                 Expanded(
                   child: _OverviewItem(
-                    icon: Icons.account_balance_wallet,
+                    icon: Icons.account_balance_wallet_rounded,
                     label: localizations?.walletBalance ?? 'Wallet Balance',
-                    value: '€${_walletBalance.toStringAsFixed(2)}',
-                    color: Colors.blue,
+                    value: '€${walletBalance.toStringAsFixed(2)}',
+                    color: Colors.white,
+                    isGradient: true,
                   ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: _OverviewItem(
-                    icon: Icons.confirmation_number,
+                    icon: Icons.confirmation_number_rounded,
                     label: localizations?.activeTickets ?? 'Active Tickets',
-                    value: '$_totalActiveTickets',
-                    color: Theme.of(context).colorScheme.primary,
+                    value: '$ticketCount',
+                    color: Colors.white,
+                    isGradient: true,
                   ),
                 ),
               ],
@@ -197,20 +357,43 @@ class _HomePageContentState extends State<HomePageContent> {
     );
   }
 
-  Widget _buildActiveTicketsSection(AppLocalizations? localizations) {
+  Widget _buildActiveTicketsSection(
+    AppLocalizations? localizations,
+    List<models.Booking> bookings,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              localizations?.activeTickets ?? 'Active Tickets',
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primaryContainer.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.confirmation_number_rounded,
+                    color: Theme.of(context).colorScheme.primary,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  localizations?.activeTickets ?? 'Active Tickets',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 22,
+                  ),
+                ),
+              ],
             ),
-            if (_activeBookings.isNotEmpty)
+            if (bookings.isNotEmpty)
               TextButton.icon(
                 onPressed: () {
                   Navigator.push(
@@ -218,49 +401,84 @@ class _HomePageContentState extends State<HomePageContent> {
                     MaterialPageRoute(
                       builder: (context) => const AllTicketsPage(),
                     ),
-                  ).then((_) => _loadData());
+                  ).then((_) {
+                    ref.invalidate(activeBookingsProvider);
+                    ref.invalidate(walletBalanceProvider);
+                  });
                 },
-                icon: const Icon(Icons.arrow_forward),
+                icon: const Icon(Icons.arrow_forward_rounded, size: 18),
                 label: Text(localizations?.viewAll ?? 'View All'),
+                style: TextButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.primary,
+                ),
               ),
           ],
         ),
-        const SizedBox(height: 12),
-        if (_activeBookings.isEmpty)
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                children: [
-                  Icon(
+        const SizedBox(height: 16),
+        if (bookings.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(32.0),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
                     Icons.confirmation_number_outlined,
-                    size: 64,
-                    color: Colors.grey[400],
+                    size: 48,
+                    color: Colors.grey.shade400,
                   ),
-                  const SizedBox(height: 16),
-                  Text(
-                    localizations?.noActiveTickets ?? 'No active tickets',
-                    style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  localizations?.noActiveTickets ?? 'No active tickets',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  localizations?.bookFirstTicket ??
+                      'Book your first ticket to get started',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+                ),
+                const SizedBox(height: 20),
+                FilledButton.icon(
+                  onPressed: () {
+                    ref.read(navigationIndexProvider.notifier).state = 1;
+                  },
+                  icon: const Icon(Icons.add_rounded),
+                  label: Text(localizations?.bookTicket ?? 'Book Ticket'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    localizations?.bookFirstTicket ??
-                        'Book your first ticket to get started',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           )
         else
-          ..._activeBookings
+          ...bookings
               .take(5)
               .map(
                 (booking) => Padding(
-                  key: ValueKey(booking.id), // Add key for better performance
-                  padding: const EdgeInsets.only(bottom: 12),
+                  key: ValueKey(booking.id),
+                  padding: const EdgeInsets.only(bottom: 16),
                   child: BookingCard(
                     booking: booking,
                     onTap: () {
@@ -278,22 +496,31 @@ class _HomePageContentState extends State<HomePageContent> {
                   ),
                 ),
               ),
-        if (_activeBookings.length > 5)
+        if (bookings.length > 5)
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Center(
-              child: OutlinedButton.icon(
+              child: FilledButton.tonalIcon(
                 onPressed: () {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (context) => const AllTicketsPage(),
                     ),
-                  ).then((_) => _loadData());
+                  ).then((_) {
+                    ref.invalidate(activeBookingsProvider);
+                    ref.invalidate(walletBalanceProvider);
+                  });
                 },
-                icon: const Icon(Icons.arrow_forward),
+                icon: const Icon(Icons.arrow_forward_rounded),
                 label: Text(
-                  '${localizations?.viewMore ?? 'View More'} (${_activeBookings.length - 5} more)',
+                  '${localizations?.viewMore ?? 'View More'} (${bookings.length - 5} more)',
+                ),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
                 ),
               ),
             ),
@@ -302,7 +529,7 @@ class _HomePageContentState extends State<HomePageContent> {
     );
   }
 
-  void _showQRCodePopup(BuildContext context, Booking booking) {
+  void _showQRCodePopup(BuildContext context, models.Booking booking) {
     showDialog(
       context: context,
       barrierColor: Colors.black87,
@@ -422,47 +649,73 @@ class _OverviewItem extends StatelessWidget {
   final String label;
   final String value;
   final Color color;
+  final bool isGradient;
 
   const _OverviewItem({
     required this.icon,
     required this.label,
     required this.value,
     required this.color,
+    this.isGradient = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
+        color: isGradient
+            ? Colors.white.withValues(alpha: 0.15)
+            : color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(16),
+        border: isGradient
+            ? Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1)
+            : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, color: color, size: 20),
-              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isGradient
+                      ? Colors.white.withValues(alpha: 0.2)
+                      : color.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  icon,
+                  color: isGradient ? Colors.white : color,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   label,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
-                  maxLines: 1,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: isGradient
+                        ? Colors.white.withValues(alpha: 0.9)
+                        : Colors.grey[700],
+                  ),
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           Text(
             value,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            style: TextStyle(
+              fontSize: 24,
               fontWeight: FontWeight.bold,
-              color: color,
+              color: isGradient ? Colors.white : color,
+              height: 1.2,
             ),
           ),
         ],

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:provider/provider.dart' as provider;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:app/l10n/app_localizations.dart';
 import '../services/booking_service.dart';
 import '../services/wallet_service.dart';
@@ -10,16 +11,19 @@ import '../services/notification_service.dart';
 import '../models/ticket_type.dart';
 import '../models/station.dart';
 import '../models/favorite_ticket.dart';
+import '../providers/booking_providers.dart';
+import '../providers/service_providers.dart';
+import '../utils/error_handler.dart';
 import 'map_page.dart';
 
-class BookingPage extends StatefulWidget {
+class BookingPage extends ConsumerStatefulWidget {
   const BookingPage({super.key});
 
   @override
-  State<BookingPage> createState() => _BookingPageState();
+  ConsumerState<BookingPage> createState() => _BookingPageState();
 }
 
-class _BookingPageState extends State<BookingPage> {
+class _BookingPageState extends ConsumerState<BookingPage> {
   final BookingService _bookingService = BookingService();
   final WalletService _walletService = WalletService();
   final FavoriteService _favoriteService = FavoriteService();
@@ -38,6 +42,7 @@ class _BookingPageState extends State<BookingPage> {
   String _selectedCategory = 'Individual'; // Default category
   bool? _isCurrentFavorite; // Cache favorite status
   bool _isCheckingFavorite = false;
+  bool _isFavoritesExpanded = true; // Controls favorites section collapse
 
   String? _widgetFavoriteId;
 
@@ -151,9 +156,7 @@ class _BookingPageState extends State<BookingPage> {
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error loading data: $e')));
+        ErrorHandler.showError(context, e, contextMessage: 'load data');
       }
     }
   }
@@ -310,9 +313,7 @@ class _BookingPageState extends State<BookingPage> {
       _checkFavoriteStatus();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error updating favorite: $e')));
+        ErrorHandler.showError(context, e, contextMessage: 'update favorite');
       }
     }
   }
@@ -415,11 +416,18 @@ class _BookingPageState extends State<BookingPage> {
           ),
         );
 
+        // Invalidate booking providers to refresh ticket lists
+        ref.invalidate(activeBookingsProvider);
+        ref.invalidate(allBookingsProvider);
+        // Invalidate wallet balance provider to refresh balance
+        ref.invalidate(walletBalanceProvider);
+        ref.invalidate(walletProvider);
+
         await _loadData();
 
         if (mounted) {
           try {
-            final bleService = Provider.of<BLEService>(context, listen: false);
+            final bleService = provider.Provider.of<BLEService>(context, listen: false);
             bleService.updateActiveTickets();
           } catch (e) {
             // BLE service might not be initialized
@@ -485,46 +493,68 @@ class _BookingPageState extends State<BookingPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Favorites Section with Count Badge
+                    // Favorites Section with Count Badge - Collapsible
                     if (_favorites.isNotEmpty) ...[
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
+                      InkWell(
+                        onTap: () {
+                          setState(() {
+                            _isFavoritesExpanded = !_isFavoritesExpanded;
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(8),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(
-                                localizations?.favorites ?? 'Favorites',
-                                style: theme.textTheme.titleLarge?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: theme.colorScheme.primary,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  '${_favorites.length}/$_maxFavorites',
-                                  style: TextStyle(
-                                    color: theme.colorScheme.onPrimary,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
+                              Row(
+                                children: [
+                                  Text(
+                                    localizations?.favorites ?? 'Favorites',
+                                    style: theme.textTheme.titleLarge?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: theme.colorScheme.primary,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      '${_favorites.length}/$_maxFavorites',
+                                      style: TextStyle(
+                                        color: theme.colorScheme.onPrimary,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              AnimatedRotation(
+                                turns: _isFavoritesExpanded ? 0 : -0.25,
+                                duration: const Duration(milliseconds: 200),
+                                child: Icon(
+                                  Icons.expand_more,
+                                  color: theme.colorScheme.primary,
                                 ),
                               ),
                             ],
                           ),
-                        ],
+                        ),
                       ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        height: 160,
-                        child: ListView.builder(
+                      AnimatedCrossFade(
+                        firstChild: Column(
+                          children: [
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              height: 160,
+                              child: ListView.builder(
                           scrollDirection: Axis.horizontal,
                           itemCount: _favorites.length,
                           itemBuilder: (context, index) {
@@ -783,8 +813,16 @@ class _BookingPageState extends State<BookingPage> {
                                 ),
                               ),
                             );
-                          },
+                              },
+                            ),
+                          ),
+                          ],
                         ),
+                        secondChild: const SizedBox.shrink(),
+                        crossFadeState: _isFavoritesExpanded
+                            ? CrossFadeState.showFirst
+                            : CrossFadeState.showSecond,
+                        duration: const Duration(milliseconds: 200),
                       ),
                       const SizedBox(height: 32),
                     ],

@@ -11,10 +11,13 @@ import '../models/booking.dart';
 /// Custom Service UUID for Ticket Mania BLE service
 /// Format: 0000XXXX-0000-1000-8000-00805F9B34FB (16-bit UUID)
 const String ticketManiaServiceUuid = '0000FEED-0000-1000-8000-00805F9B34FB';
-const String ticketManiaCharacteristicUuid = '0000FEED-0001-1000-8000-00805F9B34FB';
+const String ticketManiaCharacteristicUuid =
+    '0000FEED-0001-1000-8000-00805F9B34FB';
 
 /// Method channel for native BLE advertising
-const MethodChannel _bleChannel = MethodChannel('com.fishmindlabs.ticketmania/ble_advertising');
+const MethodChannel _bleChannel = MethodChannel(
+  'com.fishmindlabs.ticketmania/ble_advertising',
+);
 
 class BLEService extends ChangeNotifier {
   final BookingService _bookingService = BookingService();
@@ -57,9 +60,7 @@ class BLEService extends ChangeNotifier {
   /// Get whether auto-validation is enabled (from preferences)
   /// Returns cached value if available, otherwise loads from preferences
   Future<bool> isAutoValidationEnabled() async {
-    if (_autoValidationEnabled == null) {
-      _autoValidationEnabled = await _loadAutoValidationPreference();
-    }
+    _autoValidationEnabled ??= await _loadAutoValidationPreference();
     return _autoValidationEnabled ?? true;
   }
 
@@ -80,13 +81,16 @@ class BLEService extends ChangeNotifier {
     try {
       // Load auto-validation preference
       _autoValidationEnabled = await _loadAutoValidationPreference();
-      
+
       // Check and request Bluetooth permissions
       final bluetoothScanStatus = await Permission.bluetoothScan.request();
-      final bluetoothAdvertiseStatus = await Permission.bluetoothAdvertise.request();
-      final bluetoothConnectStatus = await Permission.bluetoothConnect.request();
+      final bluetoothAdvertiseStatus = await Permission.bluetoothAdvertise
+          .request();
+      final bluetoothConnectStatus = await Permission.bluetoothConnect
+          .request();
       final locationStatus = await Permission.location.request();
-      final backgroundLocationStatus = await Permission.locationAlways.request();
+      final backgroundLocationStatus = await Permission.locationAlways
+          .request();
 
       if (bluetoothScanStatus.isDenied ||
           bluetoothAdvertiseStatus.isDenied ||
@@ -124,7 +128,7 @@ class BLEService extends ChangeNotifier {
   /// Uses highly optimized native code for battery efficiency
   Future<void> startAdvertising() async {
     if (_isAdvertising) return;
-    
+
     // Check if auto-validation is enabled
     final isEnabled = await isAutoValidationEnabled();
     if (!isEnabled) {
@@ -136,7 +140,12 @@ class BLEService extends ChangeNotifier {
       // Get active tickets
       final bookings = await _bookingService.getActiveBookings();
       _activeTicketIds = bookings
-          .where((b) => b.qrCode != null && (b.status == BookingStatus.confirmed || b.status == BookingStatus.active))
+          .where(
+            (b) =>
+                b.qrCode != null &&
+                (b.status == BookingStatus.confirmed ||
+                    b.status == BookingStatus.active),
+          )
           .map((b) => b.id)
           .toList();
 
@@ -150,26 +159,30 @@ class BLEService extends ChangeNotifier {
           'startAdvertising',
           {'ticketIds': _activeTicketIds},
         );
-        
+
         if (result == true) {
           _isNativeAdvertising = true;
           _isAdvertising = true;
           notifyListeners(); // Notify UI of state change
-          debugPrint('Started native BLE advertising with ${_activeTicketIds.length} ticket(s)');
-          
+          debugPrint(
+            'Started native BLE advertising with ${_activeTicketIds.length} ticket(s)',
+          );
+
           // Also start scanning for bus IoT systems
           await startScanning();
           return;
         }
       } catch (e) {
-        debugPrint('Native BLE advertising not available, falling back to scanning: $e');
+        debugPrint(
+          'Native BLE advertising not available, falling back to scanning: $e',
+        );
       }
 
       // Fallback to scanning-only approach if native advertising fails
       _isAdvertising = true;
       notifyListeners(); // Notify UI of state change
       await startScanning();
-      
+
       // Periodically restart scanning to keep it active
       _advertisingTimer = Timer.periodic(const Duration(minutes: 5), (timer) {
         if (_isAdvertising && !_isNativeAdvertising) {
@@ -188,7 +201,7 @@ class BLEService extends ChangeNotifier {
   /// If savePreference is true, also saves the preference to disable auto-validation
   Future<void> stopAdvertising({bool savePreference = false}) async {
     if (!_isAdvertising) return;
-    
+
     // Save preference if requested
     if (savePreference) {
       await _saveAutoValidationPreference(false);
@@ -263,8 +276,9 @@ class BLEService extends ChangeNotifier {
       final advertisementData = result.advertisementData;
 
       // Check if device has our service UUID
-      if (advertisementData.serviceUuids
-          .contains(Guid(ticketManiaServiceUuid))) {
+      if (advertisementData.serviceUuids.contains(
+        Guid(ticketManiaServiceUuid),
+      )) {
         // This is a bus IoT system
         debugPrint('Found bus IoT system: ${device.remoteId}');
 
@@ -295,6 +309,7 @@ class BLEService extends ChangeNotifier {
       await device.connect(
         timeout: const Duration(seconds: 15),
         autoConnect: false,
+        license: License.free,
       );
 
       // Listen for disconnection
@@ -357,7 +372,8 @@ class BLEService extends ChangeNotifier {
 
   /// Send active ticket IDs to bus IoT system
   Future<void> _sendTicketIdsToBus(
-      BluetoothCharacteristic characteristic) async {
+    BluetoothCharacteristic characteristic,
+  ) async {
     try {
       // Send ticket IDs as JSON
       final ticketData = {
@@ -391,7 +407,7 @@ class BLEService extends ChangeNotifier {
         );
 
         debugPrint('Ticket validated via BLE: $validatedTicketId');
-        
+
         // Disconnect after validation to allow other devices
         await Future.delayed(const Duration(seconds: 2));
         await _disconnectFromBusDevice();
@@ -420,19 +436,25 @@ class BLEService extends ChangeNotifier {
       // Get updated active tickets
       final bookings = await _bookingService.getActiveBookings();
       final newTicketIds = bookings
-          .where((b) => b.qrCode != null && (b.status == BookingStatus.confirmed || b.status == BookingStatus.active))
+          .where(
+            (b) =>
+                b.qrCode != null &&
+                (b.status == BookingStatus.confirmed ||
+                    b.status == BookingStatus.active),
+          )
           .map((b) => b.id)
           .toList();
 
       // Update native advertising if active
       if (_isNativeAdvertising) {
         try {
-          await _bleChannel.invokeMethod(
-            'updateTicketIds',
-            {'ticketIds': newTicketIds},
-          );
+          await _bleChannel.invokeMethod('updateTicketIds', {
+            'ticketIds': newTicketIds,
+          });
           _activeTicketIds = newTicketIds;
-          debugPrint('Updated native BLE advertising with ${newTicketIds.length} ticket(s)');
+          debugPrint(
+            'Updated native BLE advertising with ${newTicketIds.length} ticket(s)',
+          );
           return;
         } catch (e) {
           debugPrint('Error updating native BLE advertising: $e');
@@ -446,11 +468,11 @@ class BLEService extends ChangeNotifier {
       await startAdvertising();
     }
   }
-  
+
   /// Check if native advertising is currently active
   Future<bool> isNativeAdvertising() async {
     if (!_isNativeAdvertising) return false;
-    
+
     try {
       final result = await _bleChannel.invokeMethod<bool>('isAdvertising');
       return result ?? false;
@@ -469,4 +491,3 @@ class BLEService extends ChangeNotifier {
     super.dispose();
   }
 }
-

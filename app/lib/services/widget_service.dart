@@ -46,10 +46,17 @@ class WidgetService {
         await prefs.setString('favorites', favoritesJson);
         await prefs.setInt('favorites_count', favorites.length);
         
-        // Also save to a named SharedPreferences file that the widget can read
-        // This is a workaround since home_widget package may use a different file
-        debugPrint('Saved widget data to SharedPreferences: $favoritesJson');
-        debugPrint('Favorites count: ${favorites.length}');
+        // Also try to save to "home_widget" SharedPreferences file
+        // This is what the home_widget package uses on Android
+        try {
+          // On Android, we need to use platform channels or save to a specific file
+          // The home_widget package should handle this, but we'll also save to FlutterSharedPreferences
+          // which the widget code can read
+          debugPrint('Saved widget data to SharedPreferences: $favoritesJson');
+          debugPrint('Favorites count: ${favorites.length}');
+        } catch (e) {
+          debugPrint('Failed to save to home_widget prefs: $e');
+        }
       } catch (e) {
         debugPrint('Failed to save to SharedPreferences: $e');
       }

@@ -1,5 +1,5 @@
 import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import '../services/booking_service.dart';
@@ -35,41 +35,26 @@ class _MapPageState extends State<MapPage> {
     _selectedStation = widget.selectedStation;
     _loadData();
     _getCurrentLocation();
-    
-    // Wait for the map to be rendered before using the controller
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        setState(() {
-          _isMapReady = true;
-        });
-        // Center map after it's ready
-        if (_selectedStation != null) {
-          _centerOnStation(_selectedStation!);
-        } else if (_stations.isNotEmpty && _currentPosition == null) {
-          _centerOnStation(_stations.first);
-        }
-      }
-    });
   }
 
   Future<void> _loadData() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
     try {
       final stations = await _bookingService.getStations();
+      if (!mounted) return;
       setState(() {
         _stations = stations;
         _isLoading = false;
       });
 
       // Center map on selected station or first station (only if map is ready)
-      if (_isMapReady) {
-        if (_selectedStation != null) {
-          _centerOnStation(_selectedStation!);
-        } else if (_stations.isNotEmpty && _currentPosition == null) {
-          _centerOnStation(_stations.first);
-        }
+      // This will be handled in onMapReady callback if map isn't ready yet
+      if (_isMapReady && mounted) {
+        _updateMapCenter();
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
       if (mounted) {
         ScaffoldMessenger.of(
@@ -80,6 +65,7 @@ class _MapPageState extends State<MapPage> {
   }
 
   Future<void> _getCurrentLocation() async {
+    if (!mounted) return;
     setState(() => _isLocationLoading = true);
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -93,6 +79,7 @@ class _MapPageState extends State<MapPage> {
             ),
           );
         }
+        if (!mounted) return;
         setState(() => _isLocationLoading = false);
         return;
       }
@@ -101,27 +88,31 @@ class _MapPageState extends State<MapPage> {
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
+          if (!mounted) return;
           setState(() => _isLocationLoading = false);
           return;
         }
       }
 
       if (permission == LocationPermission.deniedForever) {
+        if (!mounted) return;
         setState(() => _isLocationLoading = false);
         return;
       }
 
       final position = await Geolocator.getCurrentPosition();
+      if (!mounted) return;
       setState(() {
         _currentPosition = position;
         _isLocationLoading = false;
       });
 
       // Center map on current location (only if map is ready)
-      if (_isMapReady) {
-        _mapController.move(LatLng(position.latitude, position.longitude), 13.0);
+      if (_isMapReady && mounted) {
+        _centerOnLocation(position);
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLocationLoading = false);
       if (mounted) {
         ScaffoldMessenger.of(
@@ -132,8 +123,40 @@ class _MapPageState extends State<MapPage> {
   }
 
   void _centerOnStation(Station station) {
-    if (_isMapReady) {
-      _mapController.move(LatLng(station.latitude, station.longitude), 14.0);
+    if (_isMapReady && mounted) {
+      try {
+        _mapController.move(LatLng(station.latitude, station.longitude), 14.0);
+      } catch (e) {
+        // Map might not be fully ready yet, ignore the error
+        debugPrint('Error centering on station: $e');
+      }
+    }
+  }
+
+  void _centerOnLocation(Position position) {
+    if (_isMapReady && mounted) {
+      try {
+        _mapController.move(
+          LatLng(position.latitude, position.longitude),
+          13.0,
+        );
+      } catch (e) {
+        // Map might not be fully ready yet, ignore the error
+        debugPrint('Error centering on location: $e');
+      }
+    }
+  }
+
+  void _updateMapCenter() {
+    if (!_isMapReady || !mounted) return;
+
+    // Priority: selected station > current location > first station
+    if (_selectedStation != null) {
+      _centerOnStation(_selectedStation!);
+    } else if (_currentPosition != null) {
+      _centerOnLocation(_currentPosition!);
+    } else if (_stations.isNotEmpty) {
+      _centerOnStation(_stations.first);
     }
   }
 
@@ -199,7 +222,9 @@ class _MapPageState extends State<MapPage> {
         initialZoom: 12.0,
         onTap: (tapPosition, point) {
           // Deselect station on map tap
-          setState(() => _selectedStation = null);
+          if (mounted) {
+            setState(() => _selectedStation = null);
+          }
         },
         onMapReady: () {
           // Map is now ready, we can use the controller
@@ -207,19 +232,12 @@ class _MapPageState extends State<MapPage> {
             setState(() {
               _isMapReady = true;
             });
-            // Center map on selected station or first station
-            if (_selectedStation != null) {
-              _centerOnStation(_selectedStation!);
-            } else if (_stations.isNotEmpty && _currentPosition == null) {
-              _centerOnStation(_stations.first);
-            }
-            // Center on current location if available
-            if (_currentPosition != null) {
-              _mapController.move(
-                LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
-                13.0,
-              );
-            }
+            // Update map center after a short delay to ensure map is fully rendered
+            Future.delayed(const Duration(milliseconds: 100), () {
+              if (mounted) {
+                _updateMapCenter();
+              }
+            });
           }
         },
       ),
@@ -255,10 +273,12 @@ class _MapPageState extends State<MapPage> {
                 height: isSelected ? 60 : 50,
                 child: GestureDetector(
                   onTap: () {
-                    setState(() {
-                      _selectedStation = station;
-                    });
-                    _centerOnStation(station);
+                    if (mounted) {
+                      setState(() {
+                        _selectedStation = station;
+                      });
+                      _centerOnStation(station);
+                    }
                   },
                   child: Container(
                     decoration: BoxDecoration(

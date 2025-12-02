@@ -28,6 +28,10 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
     
+    <!-- Biometric authentication -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <uses-permission android:name="android.permission.USE_FINGERPRINT" />
+    
     <application
         android:label="Ticket Mania"
         android:name="${applicationName}"
@@ -65,6 +69,14 @@
                 android:scheme="com.fishmindlabs.ticketmania"
                 android:host="app"
                 android:pathPrefix="/book_favorite" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                android:scheme="com.fishmindlabs.ticketmania"
+                android:host="reset-password" />
             </intent-filter>
         </activity>
         <meta-data

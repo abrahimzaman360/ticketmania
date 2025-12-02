@@ -1,16 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
-import '../services/ble_service.dart';
 
-class PermissionsPage extends StatefulWidget {
+class PermissionsPage extends ConsumerStatefulWidget {
   const PermissionsPage({super.key});
 
   @override
-  State<PermissionsPage> createState() => _PermissionsPageState();
+  ConsumerState<PermissionsPage> createState() => _PermissionsPageState();
 }
 
-class _PermissionsPageState extends State<PermissionsPage> {
+class _PermissionsPageState extends ConsumerState<PermissionsPage> {
   Future<Map<String, Map<String, dynamic>>>? _permissionsFuture;
 
   @override
@@ -166,10 +165,8 @@ class _PermissionsPageState extends State<PermissionsPage> {
           ),
         ],
       ),
-      body: Consumer<BLEService>(
-        builder: (context, bleService, _) {
-          return FutureBuilder<Map<String, Map<String, dynamic>>>(
-            future: _permissionsFuture,
+      body: FutureBuilder<Map<String, Map<String, dynamic>>>(
+        future: _permissionsFuture,
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
@@ -257,9 +254,7 @@ class _PermissionsPageState extends State<PermissionsPage> {
                 ),
               );
             },
-          );
-        },
-      ),
+          ),
     );
   }
 }

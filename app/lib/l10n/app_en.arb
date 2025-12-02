@@ -93,6 +93,51 @@
   "chinese": "Chinese",
   "japanese": "Japanese",
   "arabic": "Arabic",
-  "hindi": "Hindi"
+  "hindi": "Hindi",
+  "paymentMethods": "Payment Methods",
+  "managePaymentMethods": "Manage your payment methods",
+  "setPin": "Set PIN",
+  "enterPin": "Enter PIN",
+  "enterFourDigitPin": "Enter a 4-digit PIN",
+  "confirmPin": "Confirm PIN",
+  "pinWillSecurePaymentMethods": "This PIN will be used to secure your payment methods",
+  "enterYourPinToContinue": "Enter your PIN to continue",
+  "pinsDoNotMatch": "PINs do not match. Please try again.",
+  "pinSetSuccessfully": "PIN set successfully",
+  "failedToSavePin": "Failed to save PIN. Please try again.",
+  "incorrectPin": "Incorrect PIN. Please try again.",
+  "startOver": "Start Over",
+  "securityRequired": "Security Required",
+  "setupPinToAccessPaymentMethods": "You need to set up a PIN to access payment methods. Would you like to set one up now?",
+  "setupPin": "Set Up PIN",
+  "authenticateToAccessPaymentMethods": "Authenticate to access payment methods",
+  "noPaymentMethods": "No payment methods",
+  "addPaymentMethodToGetStarted": "Add a payment method to get started",
+  "addPaymentMethod": "Add Payment Method",
+  "deletePaymentMethod": "Delete Payment Method",
+  "areYouSureDeletePaymentMethod": "Are you sure you want to delete {paymentMethodName}?",
+  "@areYouSureDeletePaymentMethod": {
+    "placeholders": {
+      "paymentMethodName": {
+        "type": "String"
+      }
+    }
+  },
+  "paymentMethodDeleted": "Payment method deleted",
+  "errorDeletingPaymentMethod": "Error deleting payment method",
+  "setAsDefault": "Set as Default",
+  "defaultPaymentMethodUpdated": "Default payment method updated",
+  "errorSettingDefault": "Error setting default",
+  "expires": "Expires",
+  "default": "Default",
+  "offlineMode": "You are offline. Viewing cached data.",
+  "failedToConnect": "Failed to connect to server",
+  "success": "Success",
+  "operationSuccessful": "Operation completed successfully",
+  "operationFailed": "Operation failed. Please try again.",
+  "failedToLoadData": "Failed to load data",
+  "failedToSave": "Failed to save changes",
+  "failedToDelete": "Failed to delete",
+  "noInternetConnection": "No internet connection. Please check your network and try again."
 }
 

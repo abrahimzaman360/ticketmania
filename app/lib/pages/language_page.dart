@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:app/l10n/app_localizations.dart';
 import '../services/locale_service.dart';
+import '../providers/locale_provider.dart';
 
-class LanguagePage extends StatelessWidget {
+class LanguagePage extends ConsumerWidget {
   const LanguagePage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final localeService = Provider.of<LocaleService>(context);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final localeService = ref.watch(localeServiceProvider);
     final currentLocale = localeService.locale;
 
     return Scaffold(

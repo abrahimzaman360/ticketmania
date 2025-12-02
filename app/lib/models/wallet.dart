@@ -6,6 +6,7 @@ class Wallet {
   final bool autoTopupEnabled;
   final double autoTopupLimit;
   final double autoTopupAmount;
+  final String? autoTopupPaymentMethodId;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -17,6 +18,7 @@ class Wallet {
     required this.autoTopupEnabled,
     required this.autoTopupLimit,
     required this.autoTopupAmount,
+    this.autoTopupPaymentMethodId,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -30,6 +32,7 @@ class Wallet {
       autoTopupEnabled: json['auto_topup_enabled'] as bool? ?? false,
       autoTopupLimit: (json['auto_topup_limit'] as num?)?.toDouble() ?? 10.0,
       autoTopupAmount: (json['auto_topup_amount'] as num?)?.toDouble() ?? 20.0,
+      autoTopupPaymentMethodId: json['auto_topup_payment_method_id'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );
@@ -44,6 +47,7 @@ class Wallet {
       'auto_topup_enabled': autoTopupEnabled,
       'auto_topup_limit': autoTopupLimit,
       'auto_topup_amount': autoTopupAmount,
+      'auto_topup_payment_method_id': autoTopupPaymentMethodId,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
     };

@@ -68,6 +68,8 @@
 		<string>We need Bluetooth access to automatically validate your tickets when you board the bus</string>
 		<key>NSBluetoothPeripheralUsageDescription</key>
 		<string>We need Bluetooth access to automatically validate your tickets when you board the bus</string>
+		<key>NSFaceIDUsageDescription</key>
+		<string>We need Face ID to secure your payment methods and sensitive information</string>
 		<key>UIStatusBarHidden</key>
 		<false/>
 		<key>UIBackgroundModes</key>
